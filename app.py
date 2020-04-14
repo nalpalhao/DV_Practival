@@ -1,69 +1,119 @@
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
-import plotly.graph_objects as go
+from dash.dependencies import Input, Output
+
 import pandas as pd
-import numpy as np
+import plotly.graph_objs as go
 
-# Dataset 'Processing'
+# Dataset Processing
 
-df_emissions = pd.read_csv('emission_full.csv')
+path = 'https://raw.githubusercontent.com/nalpalhao/DV_Practival/master/datasets/'
 
-df_emission_0 = df_emissions.loc[df_emissions['year']==2000]
+df = pd.read_csv(path + 'emissions.csv')
 
-# Building our Graphs (nothing new here)
+# Requirements for the dash core components
 
-data_choropleth = dict(type='choropleth',
-                       locations=df_emission_0['country_name'],  #There are three ways to 'merge' your data with the data pre embedded in the map
-                       locationmode='country names',
-                       z=np.log(df_emission_0['CO2_emissions']),
-                       text=df_emission_0['country_name'],
-                       colorscale='inferno',
-                       colorbar=dict(title='CO2 Emissions log scaled')
-                      )
+country_options = [
+    {'label': 'Country Portugal', 'value': 'Portugal'},
+    {'label': 'Country Spain', 'value': 'Spain'},
+    {'label': 'Country France', 'value': 'France'}
+]
+"""
+Equivalent way to iteratively build country_options from the dataset's countries:
 
-layout_choropleth = dict(geo=dict(scope='world',  #default
-                                  projection=dict(type='orthographic'
-                                                 ),
-                                  #showland=True,   # default = True
-                                  landcolor='black',
-                                  lakecolor='white',
-                                  showocean=True,   # default = False
-                                  oceancolor='azure'
-                                 ),
-                         
-                         title=dict(text='World Choropleth Map',
-                                    x=.5 # Title relative position according to the xaxis, range (0,1)
-                                   )
-                        )
+country_options = [
+    dict(label='Country ' + country, value=country)
+    for country in df['country_name'].unique()]
+ 
+ Try it out!
+"""
 
-fig = go.Figure(data=data_choropleth, layout=layout_choropleth)
+country_options = [
+    dict(label='Country ' + country, value=country)
+    for country in df['country_name'].unique()]
 
+gas_options = [
+    {'label': 'GHG Emissions', 'value': 'GHG_emissions'},
+    {'label': 'F-Gas Emissions', 'value': 'F_Gas_emissions'},
+    {'label': 'CO2 Emissions', 'value': 'CO2_emissions'}
+]
 
-
-# The App itself
+# The app itself
 
 app = dash.Dash(__name__)
 
 server = app.server
 
+app.layout = html.Div([
 
+    html.H1('Countries Emissions'),
 
+    dcc.Dropdown(
+        id='country_drop',
+        options=country_options,
+        value=['Portugal'],
+        multi=True
+    ),
 
-app.layout = html.Div(children=[
-    html.H1(children='My First DashBoard'),
+    html.Br(),
 
-    html.Div(children='''
-        Example of html Container
-    '''),
+    dcc.RadioItems(
+        id='gas_radio',
+        options=gas_options,
+        value='CO2_emissions'
+    ),
 
-    dcc.Graph(
-        id='example-graph',
-        figure=fig
+    dcc.Graph(id='graph_example'),
+
+    html.Br(),
+
+    dcc.RangeSlider(
+        id='year_slider',
+        min=1990,
+        max=2014,
+        value=[1990, 2014],
+        marks={'1990': 'Year 1990',
+               '1995': 'Year 1995',
+               '2000': 'Year 2000',
+               '2005': 'Year 2005',
+               '2010': 'Year 2010',
+               '2014': 'Year 2014'},
+        step=1
     )
 ])
 
 
+@app.callback(
+    Output('graph_example', 'figure'),
+    [Input('country_drop', 'value'),
+     Input('gas_radio', 'value'),
+     Input('year_slider', 'value')]
+)
+def update_graph(countries, gas, year):
+    filtered_by_year_df = df[(df['year'] >= year[0]) & (df['year'] <= year[1])]
+
+    scatter_data = []
+
+    for country in countries:
+        filtered_by_year_and_country_df = filtered_by_year_df.loc[filtered_by_year_df['country_name'] == country]
+
+        temp_data = dict(
+            type='scatter',
+            y=filtered_by_year_and_country_df[gas],
+            x=filtered_by_year_and_country_df['year'],
+            name=country
+        )
+
+        scatter_data.append(temp_data)
+
+    scatter_layout = dict(xaxis=dict(title='Year'),
+                          yaxis=dict(title=gas)
+                          )
+
+    fig = go.Figure(data=scatter_data, layout=scatter_layout)
+
+    return fig
 
 
 if __name__ == '__main__':
